@@ -57,8 +57,8 @@ class VAETrainer:
 
         
     def kl_loss(self, z_mean, z_log_var):
-        size_loss = torch.mean(0.5 * torch.sum(torch.mul(z_mean, z_mean)))
-        variance_loss = torch.mean(0.5 * torch.sum(-1 - z_log_var + torch.exp(z_log_var)))
+        size_loss = 0.5 * torch.sum(torch.mul(z_mean, z_mean))
+        variance_loss = 0.5 * torch.sum(-1 - z_log_var + torch.exp(z_log_var))
         return size_loss + variance_loss
 
     
@@ -93,8 +93,8 @@ class VAETrainer:
             test_kl = torch.zeros(torch.Size([len(self.test_loader.dataset)])).to(self.device).detach()
             for batch_idx, (x, y, idx) in enumerate(self.test_loader):
                 x = x.to(self.device)
-                mu = self.model._encode(x)[..., :self.model.z_dim]
-                std = self.model._encode(x)[..., self.model.z_dim:]
+                mu = self.model._encode(x)[..., 0]
+                std = self.model._encode(x)[..., 1]
                 test_kl[idx] = self.kl_loss(mu, std)
                 del x
             return torch.mean(test_kl)

@@ -20,45 +20,6 @@ class View(nn.Module):
     def forward(self, tensor):
         return tensor.view(self.size)
 
-class mu_model(nn.Module):
-    def __init__(self):
-        super(mu_model, self).__init__()
-    
-    def forward(self, tensor):
-        dim = tensor.shape[-1] // 2 
-        return tensor[..., :dim]
-
-class std_model(nn.Module):
-    def __init__(self):
-        super(std_model, self).__init__()
-
-    def forward(self, tensor):
-        dim = tensor.shape[-1] // 2 
-        return tensor[..., dim:]
-
-"""
-class sampling_model(nn.Module):
-    def __init__(self, mu, std):
-        super(sampling_model, self).__init__()
-        self.mu = mu
-        self.std = std
-
-    def forward(self, tensor):
-        dist = torch.distributions.normal.Normal(self.mu, self.std)
-        
-        return torch.add(torch.mul(tensor, torch.exp(torch.mul(self.std, 0.5))), self.mu)
-"""
-"""
-class sampling_model(nn.Module):
-    def __init__(self):
-        super(sampling_model, self).__init__()
-
-    def forward(self, mu, std):
-        dist = torch.distributions.normal.Normal(torch.zeros(mu, torch.exp(torch.mul(std, 0.5)))
-        s = dist.rsample()
-        return s
-"""
-
 
 class sampling_model(nn.Module):
     def __init__(self):
@@ -218,10 +179,6 @@ class MlpModel(nn.Module):
 
     def forward(self, x):
         z = self._encode(x)
-        #mu = mu_model()(z)
-        #std = std_model()(z)
-        #eps = Variable(torch.FloatTensor(self.z_dim).normal_(), requires_grad = True).cuda()
-        #s = sampling_model(mu, std)(eps)
         s = sampling_model()(z)
         x_recon = self._decode(s)
         return x_recon
@@ -244,7 +201,7 @@ class MlpModel(nn.Module):
 @gin.configurable(blacklist=["input_normalize_sym"])
 class MnistModel(nn.Module):
     """Encoder-Decoder architecture for MINST-like datasets."""
-    def __init__(self, z_dim=10, nc=1, input_dims=(28,28,1), distribution = gin.REQUIRED, input_normalize_sym=False):
+    def __init__(self, z_dim=10, nc=1, input_dims=(28,28,1), input_normalize_sym=False):
         super(MnistModel, self).__init__()
         self.z_dim = z_dim
         self.nc = nc
