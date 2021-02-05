@@ -1,0 +1,17 @@
+ExperimentRunner.dataset = 'mnist'
+ExperimentRunner.ae_model_class = @models.MlpModel
+ExperimentRunner.batch_size = 100
+ExperimentRunner.epochs = 2
+
+models.MlpModel.z_dim=10 #4 in MMD
+models.MlpModel.batch_norm=True
+
+models.MlpModel.e_num_layers=3
+models.MlpModel.e_num_filters=256
+models.MlpModel.g_num_layers=3
+models.MlpModel.g_num_filters=256
+
+VAETrainer.optimizer = @torch.optim.Adam
+torch.optim.Adam.lr=0.001
+torch.optim.Adam.betas=(0.5, 0.999)
+
