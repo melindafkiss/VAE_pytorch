@@ -59,18 +59,18 @@ class sampling_model(nn.Module):
         return s
 """
 
+
 class sampling_model(nn.Module):
     def __init__(self):
         super(sampling_model, self).__init__()
 
     def forward(self, tensor):
-        dim = tensor.shape[-1] // 2
-        mu = tensor[..., :dim]
-        std = tensor[..., dim:]        
-        dist = torch.distributions.normal.Normal(mu, torch.exp(torch.mul(std, 0.5)))
+        mu = tensor[..., 0]
+        std = tensor[..., 1]        
+        base_dist = torch.distributions.normal.Normal(mu, torch.exp(torch.mul(std, 0.5)))
+        dist = torch.distributions.independent.Independent(base_dist, 1)
         s = dist.rsample()
         return s
-
     
 @gin.configurable(blacklist=["input_normalize_sym"])
 class WAE(nn.Module):
@@ -182,6 +182,7 @@ class MlpModel(nn.Module):
             input_dim = output_dim
 
         self.encoder_layers.append(nn.Linear(input_dim, self.z_dim * 2))
+        self.encoder_layers.append(View((-1, self.z_dim, 2)))
 
         return nn.Sequential(*self.encoder_layers)
 

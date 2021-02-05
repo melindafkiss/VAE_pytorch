@@ -18,7 +18,7 @@ class VAETrainer:
     def __init__(self, model, device, batch_size,
                  optimizer=gin.REQUIRED, train_loader=None,
                  test_loader=None, trail_label_idx=0, rec_cost =
-                 'mean'):
+                 'sum'):
         self.model = model
         self.device = device
         self.batch_size = batch_size
@@ -103,8 +103,8 @@ class VAETrainer:
     def loss_on_batch(self, x):
         x = x.to(self.device)
         recon_x = self.model(x)
-        mu = self.model._encode(x)[..., :self.model.z_dim]
-        std = self.model._encode(x)[..., self.model.z_dim:]
+        mu = self.model._encode(x)[..., 0]
+        std = self.model._encode(x)[..., 1]
         
         bce = F.mse_loss(recon_x, x, reduction=self.rec_cost)
         
