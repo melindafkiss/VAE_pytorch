@@ -17,13 +17,14 @@ import math
 
 @gin.configurable
 class VAETrainer:
-    def __init__(self, model, funcmodel, learn_func, device, batch_size,
+    def __init__(self, model, funcmodel, learn_func, baseline, device, batch_size,
                  optimizer=gin.REQUIRED, train_loader=None,
                  test_loader=None, trail_label_idx=0, rec_cost =
                  'sum'):
         self.model = model
         self.funcmodel = funcmodel
         self.learn_func = learn_func
+        self.baseline = baseline
         self.device = device
         self.batch_size = batch_size
         self.optimizer = optimizer(self.model.parameters())
@@ -70,23 +71,41 @@ class VAETrainer:
     def fdiv_loss(self, x, N = 10):
         inp = torch.zeros(N)
         latent_samples = self.sample_pz(N)
-        enc_mean = self.model._encode(x)[..., 0]
-        enc_sigma = self.model._encode(x)[..., 1]
+
+        if self.learn_func:
+            with torch.no_grad():
+                x = x.to(self.device)
+                enc_mean = self.model._encode(x)[..., 0]
+                enc_sigma = self.model._encode(x)[..., 1]
+        else:
+            x = x.to(self.device)
+            enc_mean = self.model._encode(x)[..., 0]
+            enc_sigma = self.model._encode(x)[..., 1]
         
         base_dist_1 = torch.distributions.normal.Normal(torch.zeros(self.model.z_dim), torch.ones(self.model.z_dim))
         dist_1 = torch.distributions.independent.Independent(base_dist, 1)
         base_dist_2 = torch.distributions.normal.Normal(enc_mean, enc_sigma)
         dist_2 = torch.distributions.independent.Independent(base_dist, 1)
         
-        
         for i in range(N):
             z = latent_samples[i]
-            dec_mean = self.model._decode(z)
+            if self.learn_func:
+                with torch.no_grad():
+                    dec_mean = self.model._decode(z)
+            else:
+                dec_mean = self.model._decode(z)
+            
             base_dist_3 = torch.distributions.normal.Normal(dec_mean, torch.ones(np.prod(self.model.input_dims)))
             dist_3 = torch.distributions.independent.Independent(base_dist, 1)
-            
-            inp[i] = self.funcmodel(torch.exp(dist_1.log_prob(z)) * torch.exp(dist_3.log_prob(x)) / torch.exp(dist_2.log_prob(z)))
 
+            v = torch.exp(dist_1.log_prob(z)) * torch.exp(dist_3.log_prob(x)) / torch.exp(dist_2.log_prob(z))
+            
+            if self.learn_func:
+                inp[i] = self.funcmodel(v)
+            else:
+                with torch.no_grad():
+                    inp[i] = self.funcmodel(v)
+        
         value = torch.mean(inp)
         value = self.funcmodel.f_inverse(value)
         value = torch.log(value)
@@ -139,8 +158,8 @@ class VAETrainer:
             return torch.mean(test_kl)
 
             
-    def loss_on_batch(self, x):            
-        if self.learn_func == False:
+    def loss_on_batch(self, x):
+        if self.baseline:
             x = x.to(self.device)
             recon_x = self.model(x)
             mu = self.model._encode(x)[..., 0]
@@ -158,12 +177,6 @@ class VAETrainer:
             }
 
         else:
-            with torch.no_grad():
-                x = x.to(self.device)
-                recon_x = self.model(x)
-                mu = self.model._encode(x)[..., 0]
-                std = self.model._encode(x)[..., 1]
-
             loss = self.fdiv_loss(x, 10) + self.f_log_loss(100)
             result = {
                 'loss': loss,

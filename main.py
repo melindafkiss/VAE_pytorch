@@ -38,7 +38,7 @@ class ExperimentRunner():
                  outdir='out', datadir='~/datasets', batch_size=200,
                  num_iterations= None, prefix='', dataset='mnist',
                  ae_model_class=gin.REQUIRED, f_model = gin.REQUIRED,
-                 learn_func = False, limit_train_size=None,
+                 learn_func = False, baseline = True, limit_train_size=None,
                  trail_label_idx=0, input_normalize_sym = False):
         self.seed = seed
         self.no_cuda = no_cuda
@@ -60,6 +60,7 @@ class ExperimentRunner():
         self.ae_model_class = ae_model_class
         self.f_model = f_model
         self.learn_func = learn_func
+        self.baseline = baseline
         self.limit_train_size = limit_train_size
         self.trail_label_idx = trail_label_idx
         self.input_normalize_sym = input_normalize_sym
@@ -96,7 +97,7 @@ class ExperimentRunner():
         self.model = self.ae_model_class(nc=nc, input_dims=input_dims, input_normalize_sym=self.input_normalize_sym)
         self.model.to(self.device)
 
-        self.trainer = trainers.VAETrainer(self.model, self.f_model, self.learn_func, self.device, batch_size = self.batch_size, train_loader=self.train_loader, test_loader=self.test_loader, trail_label_idx = self.trail_label_idx)
+        self.trainer = trainers.VAETrainer(self.model, self.f_model, self.learn_func, self.baseline, self.device, batch_size = self.batch_size, train_loader=self.train_loader, test_loader=self.test_loader, trail_label_idx = self.trail_label_idx)
 
     
     def setup_data_loaders(self):
@@ -146,7 +147,7 @@ class ExperimentRunner():
                 self.global_iters += 1
                 batch = self.trainer.train_on_batch(x)
 
-                if self.learn_func == False:
+                if self.baseline:
                                         
                     if self.global_iters % self.log_interval == 0:                        
                         print("Global iter: {}, Train epoch: {}, batch: {}/{}, loss: {}, reg_loss: {}, rec_loss:{}".format(self.global_iters, self.epoch, batch_idx+1, len(self.train_loader), batch['loss'], batch['reg_loss'], batch['rec_loss']))
