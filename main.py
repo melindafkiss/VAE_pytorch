@@ -159,6 +159,17 @@ class ExperimentRunner():
                     if self.global_iters % self.plot_interval == 0:
                         self.test()
 
+                else:
+                    for self.learn_func in {False, True}:
+                        if self.global_iters % self.log_interval == 0:                        
+                            print("Global iter: {}, Train epoch: {}, batch: {}/{}, loss: {}".format(self.global_iters, self.epoch, batch_idx+1, len(self.train_loader), batch['loss']))
+                        
+                        neptune.send_metric('train_loss', x=self.global_iters, y=batch['loss'])
+
+                        if self.global_iters % self.plot_interval == 0:
+                            self.test()
+
+
                 
     def plot_images(self, x, train_rec, test_rec, gen):
         with torch.no_grad():
@@ -176,34 +187,44 @@ class ExperimentRunner():
 
 
     def test(self):
-        test_loss, test_reg_loss, test_rec_loss = 0.0, 0.0, 0.0
+        if self.baseline:
+            test_loss, test_reg_loss, test_rec_loss = 0.0, 0.0, 0.0
         
-        with torch.no_grad():
-            for _, (x_test, y_test, idx) in enumerate(self.test_loader, start=0):                
-                test_evals = self.trainer.rec_loss_on_test(x_test)
-                test_rec_loss += test_evals['rec_loss'].item()
+            with torch.no_grad():
+                for _, (x_test, y_test, idx) in enumerate(self.test_loader, start=0):                
+                    test_evals = self.trainer.rec_loss_on_test(x_test)
+                    test_rec_loss += test_evals['rec_loss'].item()
 
-            test_rec_loss /= len(self.test_loader)
-            test_reg_loss = self.trainer.reg_loss_on_test().item()
-            test_loss = test_rec_loss + test_reg_loss
+                    test_rec_loss /= len(self.test_loader)
+                    test_reg_loss = self.trainer.reg_loss_on_test().item()
+                    test_loss = test_rec_loss + test_reg_loss
 
-        #with open('ratio_{}_{}.txt'.format(self.trainer.trainer_type, self.trainer.reg_lambda), 'a') as file:
-        #    file.write(str(ratio) + '\n')
+            #with open('ratio_{}_{}.txt'.format(self.trainer.trainer_type, self.trainer.reg_lambda), 'a') as file:
+            #    file.write(str(ratio) + '\n')
 
-        print('Test Epoch: {} ({:.2f}%)\tLoss: {:.6f}'.format(self.epoch + 1, float(self.epoch + 1) / (self.epochs) * 100., test_loss))
-        #neptune.send_metric('test_loss', x=self.global_iters, y=test_loss)
-        #neptune.send_metric('test_reg_loss', x=self.global_iters, y=test_reg_loss)
-        #neptune.send_metric('test_rec_loss', x=self.global_iters, y=test_rec_loss)
-        #neptune.send_metric('test_covered_area', x=self.global_iters, y=covered)
+            print('Test Epoch: {} ({:.2f}%)\tLoss: {:.6f}'.format(self.epoch + 1, float(self.epoch + 1) / (self.epochs) * 100., test_loss))
+            #neptune.send_metric('test_loss', x=self.global_iters, y=test_loss)
+            #neptune.send_metric('test_reg_loss', x=self.global_iters, y=test_reg_loss)
+            #neptune.send_metric('test_rec_loss', x=self.global_iters, y=test_rec_loss)
+            #neptune.send_metric('test_covered_area', x=self.global_iters, y=covered)
 
-        with torch.no_grad():
-            _, (x, _, _) = enumerate(self.test_loader, start=0).__next__()
-            test_reconstruct = self.trainer.reconstruct(x)
+            with torch.no_grad():
+                _, (x, _, _) = enumerate(self.test_loader, start=0).__next__()
+                test_reconstruct = self.trainer.reconstruct(x)
 
-            _, (x, _, _) = enumerate(self.train_loader, start=0).__next__()
-            train_reconstruct = self.trainer.reconstruct(x)
-            gen_batch = self.trainer.decode_batch(self.trainer.sample_pz(n=self.batch_size))
-            self.plot_images(x, train_reconstruct, test_reconstruct, gen_batch['decode'])
+                _, (x, _, _) = enumerate(self.train_loader, start=0).__next__()
+                train_reconstruct = self.trainer.reconstruct(x)
+                gen_batch = self.trainer.decode_batch(self.trainer.sample_pz(n=self.batch_size))
+                self.plot_images(x, train_reconstruct, test_reconstruct, gen_batch['decode'])
+        else:
+            with torch.no_grad():
+                _, (x, _, _) = enumerate(self.test_loader, start=0).__next__()
+                test_reconstruct = self.trainer.reconstruct(x)
+
+                _, (x, _, _) = enumerate(self.train_loader, start=0).__next__()
+                train_reconstruct = self.trainer.reconstruct(x)
+                gen_batch = self.trainer.decode_batch(self.trainer.sample_pz(n=self.batch_size))
+                self.plot_images(x, train_reconstruct, test_reconstruct, gen_batch['decode'])
 
 
 def main(argv):

@@ -2,6 +2,7 @@ ExperimentRunner.dataset = 'mnist'
 ExperimentRunner.ae_model_class = @models.MlpModel
 ExperimentRunner.f_model = @models.funcModel
 ExperimentRunner.learn_func = False
+ExperimentRunner.baseline = True
 ExperimentRunner.batch_size = 100
 ExperimentRunner.epochs = 10
 

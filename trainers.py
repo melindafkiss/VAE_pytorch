@@ -177,7 +177,8 @@ class VAETrainer:
             }
 
         else:
-            loss = self.fdiv_loss(x, 10) + self.f_log_loss(100)
+            # need to implement hyperparam!
+            loss = self.fdiv_loss(x, 10) + 10 * self.f_log_loss(100)
             result = {
                 'loss': loss,
                 'decode': recon_x,
