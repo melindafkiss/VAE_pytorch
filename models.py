@@ -4,8 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
+from torch.nn.parameter import Parameter
 from torch.autograd import Variable
-from torch.nn.utils import spectral_norm
 
 import gin
 
@@ -28,11 +28,50 @@ class sampling_model(nn.Module):
     def forward(self, tensor):
         mu = tensor[..., 0]
         std = tensor[..., 1]        
-        base_dist = torch.distributions.normal.Normal(mu, torch.exp(torch.mul(std, 0.5)))
-        dist = torch.distributions.independent.Independent(base_dist, 1)
+        dist = torch.distributions.normal.Normal(mu, torch.exp(torch.mul(std, 0.5)))
         s = dist.rsample()
         return s
+
+class PosLinear(nn.Module):
+    def __init__(self, in_dim, out_dim):
+        super(PosLinear, self).__init_()
+        self.weight = Parameter(torch.Tensor(in_dim, out_dim))
+        self.bias = Parameter(torch.Tensor(out_dim))
+
+    def forward(self, x):
+        return torch.matmul(x, torch.abs(self.weight)) + self.bias
+
+def softplus_inverse(x):
+    return torch.log(torch.exp(x) - 1) 
+
+@gin.configurable()
+class funcModel(nn.Module):
+    def __init__(self):
+        super(funcModel, self, nl = 3).__init__()
+        # This is the convex monotonically increasing function
+        self.nl = nl
+        self.func = nn.Sequential()
+        for i in range(nl):
+            self.func.add(nn.PosLinear(1, 1))
+            self.func.add(nn.Softplus())        
+
+    def weight_init(self):
+        for block in self._modules:
+            for m in self._modules[block]:
+                kaiming_init(m)
+
+    def forward(self, x):
+        return self.func(x)
     
+    def f_inverse(self, x):
+        for j in reversed(range(nl)):
+            x = softplus_inverse(x)
+            w = 1 / self.func.layer[2 * nl].weight
+            b = self.func.layer[2 * nl].bias
+            x = (x - b) * w
+        return x
+    
+        
 @gin.configurable(blacklist=["input_normalize_sym"])
 class WAE(nn.Module):
     """Encoder-Decoder architecture for both WAE-MMD and WAE-GAN."""

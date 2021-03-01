@@ -13,13 +13,17 @@ import gin.torch.external_configurables
 
 import time
 
+import math
+
 @gin.configurable
 class VAETrainer:
-    def __init__(self, model, device, batch_size,
+    def __init__(self, model, funcmodel, learn_func, device, batch_size,
                  optimizer=gin.REQUIRED, train_loader=None,
                  test_loader=None, trail_label_idx=0, rec_cost =
                  'sum'):
         self.model = model
+        self.funcmodel = funcmodel
+        self.learn_func = learn_func
         self.device = device
         self.batch_size = batch_size
         self.optimizer = optimizer(self.model.parameters())
@@ -57,11 +61,46 @@ class VAETrainer:
 
         
     def kl_loss(self, z_mean, z_log_var):
-        size_loss = 0.5 * torch.sum(torch.mul(z_mean, z_mean))
-        variance_loss = 0.5 * torch.sum(-1 - z_log_var + torch.exp(z_log_var))
+        size_loss = torch.mean(0.5 * torch.sum(torch.mul(z_mean, z_mean), axis = 1))
+        variance_loss = torch.mean(0.5 * torch.sum(-1 - z_log_var + torch.exp(z_log_var), axis = 1))
         return size_loss + variance_loss
 
-    
+
+    # Assuming that the variance of the decoder is 1
+    def fdiv_loss(self, x, N = 10):
+        inp = torch.zeros(N)
+        latent_samples = self.sample_pz(N)
+        enc_mean = self.model._encode(x)[..., 0]
+        enc_sigma = self.model._encode(x)[..., 1]
+        
+        base_dist_1 = torch.distributions.normal.Normal(torch.zeros(self.model.z_dim), torch.ones(self.model.z_dim))
+        dist_1 = torch.distributions.independent.Independent(base_dist, 1)
+        base_dist_2 = torch.distributions.normal.Normal(enc_mean, enc_sigma)
+        dist_2 = torch.distributions.independent.Independent(base_dist, 1)
+        
+        
+        for i in range(N):
+            z = latent_samples[i]
+            dec_mean = self.model._decode(z)
+            base_dist_3 = torch.distributions.normal.Normal(dec_mean, torch.ones(np.prod(self.model.input_dims)))
+            dist_3 = torch.distributions.independent.Independent(base_dist, 1)
+            
+            inp[i] = self.funcmodel(torch.exp(dist_1.log_prob(z)) * torch.exp(dist_3.log_prob(x)) / torch.exp(dist_2.log_prob(z)))
+
+        value = torch.mean(inp)
+        value = self.funcmodel.f_inverse(value)
+        value = torch.log(value)
+
+        return value
+
+    def f_log_loss(self, M = 100):
+        dist = 0
+        for i in range(M):
+            x = 0.5 + i / M
+            dist += ((self.func_model(x) - math.log(x)) ** 2) / M
+        return dist
+        
+
     def decode_batch(self, z):
         with torch.no_grad():
             z = z.to(self.device)
@@ -100,23 +139,38 @@ class VAETrainer:
             return torch.mean(test_kl)
 
             
-    def loss_on_batch(self, x):
-        x = x.to(self.device)
-        recon_x = self.model(x)
-        mu = self.model._encode(x)[..., 0]
-        std = self.model._encode(x)[..., 1]
-        
-        bce = F.mse_loss(recon_x, x, reduction=self.rec_cost)
-        
-        reg_loss = self.kl_loss(mu, std)
-        loss = bce + reg_loss
+    def loss_on_batch(self, x):            
+        if self.learn_func == False:
+            x = x.to(self.device)
+            recon_x = self.model(x)
+            mu = self.model._encode(x)[..., 0]
+            std = self.model._encode(x)[..., 1]
 
-        result = {
-            'loss': loss,
-            'reg_loss': reg_loss,
-            'rec_loss': bce,
-            'decode': recon_x,
-        }
+            bce = F.mse_loss(recon_x, x, reduction=self.rec_cost)
+            reg_loss = self.kl_loss(mu, std)
+            loss = bce + reg_loss
+
+            result = {
+                'loss': loss,
+                'reg_loss': reg_loss,
+                'rec_loss': bce,
+                'decode': recon_x,
+            }
+
+        else:
+            with torch.no_grad():
+                x = x.to(self.device)
+                recon_x = self.model(x)
+                mu = self.model._encode(x)[..., 0]
+                std = self.model._encode(x)[..., 1]
+
+            loss = self.fdiv_loss(x, 10) + self.f_log_loss(100)
+            result = {
+                'loss': loss,
+                'decode': recon_x,
+            }
+
+            
         return result
 
     def train_on_batch(self, x):
